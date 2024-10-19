@@ -4,3 +4,4 @@
 /lastupdate.tmp
 .env
 /client
+.DS_Store
