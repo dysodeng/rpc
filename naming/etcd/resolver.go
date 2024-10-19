@@ -2,8 +2,6 @@ package etcd
 
 import (
 	"context"
-	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -12,25 +10,19 @@ import (
 	grpcResolver "google.golang.org/grpc/resolver"
 )
 
-var num uint64
-
 // etcd resolver implements grpc resolver.Resolver
 type resolver struct {
 	kv        *clientv3.Client
 	target    grpcResolver.Target
 	cc        grpcResolver.ClientConn
-	store     map[string]struct{}
+	store     sync.Map
 	namespace string
-	storeLock sync.Mutex
 	stopCh    chan struct{}
-	// rn channel is used by ResolveNow() to force an immediate resolution of the target.
-	rn chan struct{}
-	t  *time.Ticker
+	rn        chan struct{} // rn channel is used by ResolveNow() to force an immediate resolution of the target.
+	t         *time.Ticker
 }
 
 func (r *resolver) start(ctx context.Context) {
-	num++
-	log.Printf("resolver start, num: %d", num)
 	prefix := "/" + r.namespace + "/" + r.target.Endpoint() + "/"
 	rch := r.kv.Watch(ctx, prefix, clientv3.WithPrefix())
 	for {
@@ -45,14 +37,10 @@ func (r *resolver) start(ctx context.Context) {
 			for _, ev := range wresp.Events {
 				switch ev.Type {
 				case mvccpb.PUT:
-					r.storeLock.Lock()
-					r.store[string(ev.Kv.Value)] = struct{}{}
-					r.storeLock.Unlock()
+					r.store.Store(string(ev.Kv.Value), struct{}{})
 					r.updateTargetState()
 				case mvccpb.DELETE:
-					r.storeLock.Lock()
-					delete(r.store, strings.Replace(string(ev.Kv.Key), prefix, "", 1))
-					r.storeLock.Unlock()
+					r.store.Delete(string(ev.Kv.Key))
 					r.updateTargetState()
 				}
 			}
@@ -62,31 +50,21 @@ func (r *resolver) start(ctx context.Context) {
 
 func (r *resolver) resolveNow() {
 	prefix := "/" + r.namespace + "/" + r.target.Endpoint() + "/"
-	log.Printf("resolver resolve now")
-	log.Printf("prefix: %s", prefix)
 	resp, err := r.kv.Get(context.Background(), prefix, clientv3.WithPrefix())
 	if err == nil {
 		for _, kv := range resp.Kvs {
-			r.storeLock.Lock()
-			r.store[string(kv.Value)] = struct{}{}
-			r.storeLock.Unlock()
+			r.store.Store(string(kv.Value), struct{}{})
 		}
 	}
-
 	r.updateTargetState()
-
-	log.Printf("%+v", r.store)
-	log.Println(r)
 }
 
 func (r *resolver) updateTargetState() {
-	addresses := make([]grpcResolver.Address, len(r.store))
-	i := 0
-	for k := range r.store {
-		addresses[i] = grpcResolver.Address{Addr: k}
-		i++
-	}
-
+	var addresses []grpcResolver.Address
+	r.store.Range(func(key, value any) bool {
+		addresses = append(addresses, grpcResolver.Address{Addr: key.(string)})
+		return true
+	})
 	_ = r.cc.UpdateState(grpcResolver.State{Addresses: addresses})
 }
 

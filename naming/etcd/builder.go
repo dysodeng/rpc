@@ -11,12 +11,9 @@ import (
 // Builder grpc etcd服务发现
 // implements grpc resolver.Builder
 type Builder struct {
-	// etcd客户端连接
-	kv *clientv3.Client
-	// 命名空间
-	namespace string
-	// 强制 ResolveNow 间隔时长
-	resolveNowFreqTime time.Duration
+	kv                 *clientv3.Client // etcd客户端连接
+	namespace          string           // 命名空间
+	resolveNowFreqTime time.Duration    // 强制 ResolveNow 间隔时长
 }
 
 const (
@@ -40,7 +37,6 @@ func (d *Builder) Build(target grpcResolver.Target, cc grpcResolver.ClientConn, 
 		kv:        d.kv,
 		target:    target,
 		cc:        cc,
-		store:     make(map[string]struct{}),
 		namespace: d.namespace,
 		stopCh:    make(chan struct{}, 1),
 		rn:        make(chan struct{}, 1),

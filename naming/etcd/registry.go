@@ -20,6 +20,7 @@ type etcd struct {
 	lease          int64
 	services       sync.Map
 	kv             *clientv3.Client
+	stopChan       chan struct{}
 }
 
 var initOnceLock sync.Once
@@ -62,7 +63,7 @@ func NewEtcdRegistry(serviceListenAddress, etcdAddress string) (naming.Registry,
 	// etcd健康检查与服务端断连重连机制
 	go func() {
 		checkHealth := func() error {
-			ctx, chCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, chCancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer chCancel()
 
 			_, err = etcdRegistry.kv.Maintenance.Status(ctx, conf.Endpoints[0])
@@ -80,14 +81,13 @@ func NewEtcdRegistry(serviceListenAddress, etcdAddress string) (naming.Registry,
 			select {
 			case <-ticker.C:
 				if err = checkHealth(); err != nil {
-					log.Println("etcd client closed")
-					log.Println("try to reconnect etcd")
+					log.Println("etcd server health check failed.")
 					// 尝试重连etcd
 					cli, err = clientv3.New(conf)
 					if err == nil {
-						etcdRegistry.kv = cli
-
+						log.Println("reconnect to etcd successfully")
 						// 重新注册服务
+						etcdRegistry.kv = cli
 						etcdRegistry.services.Range(func(key, value any) bool {
 							_ = etcdRegistry.Register(key.(string))
 							return true
@@ -105,27 +105,36 @@ func (registry *etcd) Register(serviceName string) error {
 	serviceKey := fmt.Sprintf("/%s/%s/%s", registry.namespace, serviceName, registry.serviceAddress)
 
 	// 设置租约时间
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	resp, err := registry.kv.Grant(ctx, registry.lease)
 	if err != nil {
+		cancel()
 		return err
 	}
 
 	// 注册服务并绑定租约
 	_, err = registry.kv.Put(ctx, serviceKey, registry.serviceAddress, clientv3.WithLease(resp.ID))
 	if err != nil {
+		cancel()
 		return err
 	}
 
 	// 设置续租 并定期发送续租请求(心跳)
 	leaseRespChan, err := registry.kv.KeepAlive(ctx, resp.ID)
 	if err != nil {
+		cancel()
 		return err
 	}
 
 	go func() {
 		for {
-			<-leaseRespChan
+			select {
+			case _, ok := <-leaseRespChan:
+				if !ok {
+					cancel()
+					return
+				}
+			}
 		}
 	}()
 
@@ -133,8 +142,6 @@ func (registry *etcd) Register(serviceName string) error {
 	registry.services.Store(serviceName, resp.ID)
 
 	log.Printf("register gRPC service: %s", serviceName)
-
-	log.Printf("%+v", registry.serviceList())
 
 	return nil
 }
