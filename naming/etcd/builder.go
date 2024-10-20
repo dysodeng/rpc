@@ -73,8 +73,9 @@ func (d *Builder) Build(target grpcResolver.Target, cc grpcResolver.ClientConn, 
 		t:         time.NewTicker(d.resolveNowFreqTime),
 	}
 
-	go r.start(context.Background())
+	go r.watch(context.Background())
 	r.ResolveNow(grpcResolver.ResolveNowOptions{})
+
 	return r, nil
 }
 

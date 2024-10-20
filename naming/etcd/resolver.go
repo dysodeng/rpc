@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -23,8 +24,8 @@ type resolver struct {
 	t         *time.Ticker
 }
 
-func (r *resolver) start(ctx context.Context) {
-	prefix := "/" + r.namespace + "/" + r.target.Endpoint() + "/"
+func (r *resolver) watch(ctx context.Context) {
+	prefix := fmt.Sprintf("/%s/%s/", r.namespace, r.target.Endpoint())
 	rch := r.kv.Watch(ctx, prefix, clientv3.WithPrefix())
 	for {
 		select {
@@ -50,7 +51,7 @@ func (r *resolver) start(ctx context.Context) {
 }
 
 func (r *resolver) resolveNow() {
-	prefix := "/" + r.namespace + "/" + r.target.Endpoint() + "/"
+	prefix := fmt.Sprintf("/%s/%s/", r.namespace, r.target.Endpoint())
 	resp, err := r.kv.Get(context.Background(), prefix, clientv3.WithPrefix())
 	if err == nil {
 		for _, kv := range resp.Kvs {
