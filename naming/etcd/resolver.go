@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,14 +34,14 @@ func (r *resolver) start(ctx context.Context) {
 			r.ResolveNow(grpcResolver.ResolveNowOptions{})
 		case <-r.stopCh:
 			return
-		case wresp := <-rch:
-			for _, ev := range wresp.Events {
-				switch ev.Type {
+		case keyWatchCh := <-rch:
+			for _, event := range keyWatchCh.Events {
+				switch event.Type {
 				case mvccpb.PUT:
-					r.store.Store(string(ev.Kv.Value), struct{}{})
+					r.store.Store(string(event.Kv.Value), struct{}{})
 					r.updateTargetState()
 				case mvccpb.DELETE:
-					r.store.Delete(string(ev.Kv.Key))
+					r.store.Delete(strings.Replace(string(event.Kv.Key), prefix, "", -1))
 					r.updateTargetState()
 				}
 			}
