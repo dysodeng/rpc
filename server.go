@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"fmt"
 	"net"
 	"reflect"
 
@@ -18,13 +19,15 @@ type Server interface {
 }
 
 type server struct {
+	appName     string
 	serviceAddr string
 	registry    naming.Registry
 	grpcServer  *grpc.Server
 }
 
-func NewServer(serviceAddr string, registry naming.Registry) Server {
+func NewServer(appName, serviceAddr string, registry naming.Registry) Server {
 	s := &server{
+		appName:     appName,
 		serviceAddr: serviceAddr,
 		registry:    registry,
 		grpcServer:  grpc.NewServer(),
@@ -46,12 +49,7 @@ func (s *server) RegisterService(service metadata.ServiceRegister, grpcRegister 
 	serviceMetadata := service.RegisterMetadata()
 
 	// 向注册中心注册服务
-	var serviceName string
-	if serviceMetadata.AppName != "" {
-		serviceName = serviceMetadata.AppName + "."
-	}
-	serviceName += serviceMetadata.ServiceName
-
+	serviceName := fmt.Sprintf("%s.%s", s.appName, serviceMetadata.ServiceName)
 	err := s.registry.Register(serviceName)
 	if err != nil {
 		return err
