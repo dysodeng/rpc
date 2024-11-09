@@ -18,15 +18,15 @@ type Builder struct {
 	namespace          string           // 命名空间
 	kv                 *clientv3.Client // etcd客户端连接
 	dialTimeout        time.Duration    // etcd连接超时时间
-	resolveNowFreqTime time.Duration    // 强制 ResolveNow 间隔时长
+	resolveNowFreqTime time.Duration    // 定时 ResolveNow 间隔时长
 }
 
 const (
 	defaultResolveNowFreq = time.Hour * 2 // 强制 ResolveNow 默认间隔时长2小时
 )
 
-// NewEtcdV3Builder new etcd Builder
-func NewEtcdV3Builder(etcdAddress string, opts ...BuilderOption) *Builder {
+// NewEtcdBuilder new etcd Builder
+func NewEtcdBuilder(etcdAddress string, opts ...BuilderOption) *Builder {
 	builder := &Builder{
 		namespace:          defaultNamespace,
 		resolveNowFreqTime: defaultResolveNowFreq,
