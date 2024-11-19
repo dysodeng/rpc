@@ -25,12 +25,16 @@ type server struct {
 	grpcServer  *grpc.Server
 }
 
-func NewServer(appName, serviceAddr string, registry naming.Registry) Server {
+func NewServer(appName, serviceAddr string, registry naming.Registry, opts ...ServerOption) Server {
+	options := &serverOption{}
+	for _, opt := range opts {
+		opt(options)
+	}
 	s := &server{
 		appName:     appName,
 		serviceAddr: serviceAddr,
 		registry:    registry,
-		grpcServer:  grpc.NewServer(),
+		grpcServer:  grpc.NewServer(options.grpcServerOptions...),
 	}
 	return s
 }
@@ -79,4 +83,16 @@ func (s *server) Stop() error {
 	}
 	s.grpcServer.Stop()
 	return nil
+}
+
+type serverOption struct {
+	grpcServerOptions []grpc.ServerOption
+}
+
+type ServerOption func(s *serverOption)
+
+func WithServerGrpcServerOption(opts ...grpc.ServerOption) ServerOption {
+	return func(s *serverOption) {
+		s.grpcServerOptions = append(s.grpcServerOptions, opts...)
+	}
 }
