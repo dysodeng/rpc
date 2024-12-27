@@ -78,7 +78,7 @@ func NewEtcdRegistry(grpcServiceRegisterAddress, etcdAddress string, opts ...Reg
 		return nil, errors.Wrap(err, "could not connect to etcd")
 	}
 
-	// etcd健康检查与服务端断连重连机制
+	// etcd健康检查与服务端断连重试机制
 	go func() {
 		checkHealth := func() error {
 			ctx, chCancel := context.WithTimeout(context.Background(), 1*time.Second)

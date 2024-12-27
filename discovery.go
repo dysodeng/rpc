@@ -68,7 +68,7 @@ type ServiceDiscoveryLB string
 
 const (
 	PickFirst  ServiceDiscoveryLB = "pick_first"  // 选择第一个
-	RoundRobin ServiceDiscoveryLB = "round_robin" // 轮训
+	RoundRobin ServiceDiscoveryLB = "round_robin" // 轮询
 )
 
 type serviceDiscoveryOption struct {
