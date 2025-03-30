@@ -5,6 +5,8 @@ import (
 	"net"
 	"reflect"
 
+	"google.golang.org/grpc/keepalive"
+
 	"github.com/dysodeng/rpc/config"
 	rpcError "github.com/dysodeng/rpc/errors"
 	"github.com/dysodeng/rpc/health"
@@ -134,10 +136,21 @@ func WithServerGrpcServerOption(opts ...grpc.ServerOption) ServerOption {
 	}
 }
 
-// WithServiceLimiter 服务端限流
-func WithServiceLimiter(rateLimiter limiter.RateLimiter) ServerOption {
+// WithServerLimiter 服务端限流
+func WithServerLimiter(rateLimiter limiter.RateLimiter) ServerOption {
 	return func(s *serverOption) {
 		s.withLimiter = true
 		s.rateLimiter = rateLimiter
+	}
+}
+
+// WithServerKeepalive grpc服务端心跳配置
+func WithServerKeepalive(kep keepalive.EnforcementPolicy, kp keepalive.ServerParameters) ServerOption {
+	return func(s *serverOption) {
+		s.grpcServerOptions = append(
+			s.grpcServerOptions,
+			grpc.KeepaliveEnforcementPolicy(kep),
+			grpc.KeepaliveParams(kp),
+		)
 	}
 }

@@ -37,7 +37,6 @@ func (s *serviceDiscovery) ServiceConn(serviceName string, opts ...ServiceDiscov
 	options := &serviceDiscoveryOption{
 		grpcDialOptions: []grpc.DialOption{},
 		lb:              RoundRobin,
-		timeout:         time.Second * 10,
 	}
 	for _, opt := range opts {
 		opt(options)
@@ -61,20 +60,6 @@ func (s *serviceDiscovery) ServiceConn(serviceName string, opts ...ServiceDiscov
 	options.grpcDialOptions = append(
 		options.grpcDialOptions,
 		grpc.WithChainUnaryInterceptor(chain...),
-	)
-
-	// 超时设置与重试
-	options.grpcDialOptions = append(
-		options.grpcDialOptions,
-		grpc.WithConnectParams(grpc.ConnectParams{
-			Backoff:           backoff.DefaultConfig,
-			MinConnectTimeout: options.timeout,
-		}),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                60 * time.Second, // 保活时间
-			Timeout:             options.timeout,  // 保活超时
-			PermitWithoutStream: true,             // 没有活动流时也保持连接
-		}),
 	)
 
 	switch options.lb {
@@ -124,10 +109,21 @@ func WithServiceDiscoveryLB(lb ServiceDiscoveryLB) ServiceDiscoveryOption {
 	}
 }
 
-// WithServiceDiscoveryTimeout 添加超时设置选项
-func WithServiceDiscoveryTimeout(timeout time.Duration) ServiceDiscoveryOption {
+// WithServiceDiscoveryKeepalive 添加保活与超时选项
+func WithServiceDiscoveryKeepalive(keepaliveTime, timeout time.Duration, backoffConf backoff.Config) ServiceDiscoveryOption {
 	return func(s *serviceDiscoveryOption) {
-		s.timeout = timeout
+		s.grpcDialOptions = append(
+			s.grpcDialOptions,
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff:           backoffConf,
+				MinConnectTimeout: timeout,
+			}),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:                keepaliveTime, // 保活时间
+				Timeout:             timeout,       // 保活超时
+				PermitWithoutStream: true,          // 没有活动流时也保持连接
+			}),
+		)
 	}
 }
 
