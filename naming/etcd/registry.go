@@ -197,15 +197,6 @@ func (registry *etcd) Close() error {
 	return registry.kv.Close()
 }
 
-func (registry *etcd) serviceList() map[string]interface{} {
-	list := make(map[string]interface{})
-	registry.services.Range(func(key, value any) bool {
-		list[key.(string)] = value.(clientv3.LeaseID)
-		return true
-	})
-	return list
-}
-
 // RegistryOption etcd registry option.
 type RegistryOption func(v3 *etcd)
 
