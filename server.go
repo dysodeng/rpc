@@ -8,6 +8,7 @@ import (
 	"github.com/dysodeng/rpc/config"
 	rpcError "github.com/dysodeng/rpc/errors"
 	"github.com/dysodeng/rpc/health"
+	"github.com/dysodeng/rpc/limiter"
 	"github.com/dysodeng/rpc/logger"
 	"github.com/dysodeng/rpc/metadata"
 	"github.com/dysodeng/rpc/middleware"
@@ -35,20 +36,26 @@ type server struct {
 
 func NewServer(conf *config.ServerConfig, registry naming.Registry, opts ...ServerOption) Server {
 	options := &serverOption{}
-
-	// 添加默认中间件
-	options.grpcServerOptions = append(options.grpcServerOptions,
-		grpc.UnaryInterceptor(middleware.Chain(
-			middleware.Recovery(),
-			middleware.Logging(logger.Logger()),
-			middleware.Metrics(),
-			middleware.UnaryServerInterceptor(rpcError.ErrorHandlingInterceptor()), // 添加错误处理
-		)),
-	)
-
 	for _, opt := range opts {
 		opt(options)
 	}
+
+	// 添加默认中间件
+	chain := []middleware.UnaryServerInterceptor{
+		middleware.Recovery(),
+		middleware.Logging(logger.Logger()),
+		middleware.Metrics(),
+		middleware.UnaryServerInterceptor(rpcError.ErrorHandlingInterceptor()), // 添加错误处理
+	}
+
+	// 添加限流中间件
+	if options.withLimiter && options.rateLimiter != nil {
+		chain = append(chain, middleware.UnaryServerInterceptor(limiter.RateLimitInterceptor(options.rateLimiter)))
+	}
+
+	options.grpcServerOptions = append(options.grpcServerOptions,
+		grpc.UnaryInterceptor(middleware.Chain(chain...)),
+	)
 
 	s := &server{
 		appName:     conf.AppName,
@@ -114,12 +121,23 @@ func (s *server) Stop() error {
 
 type serverOption struct {
 	grpcServerOptions []grpc.ServerOption
+	withLimiter       bool
+	rateLimiter       limiter.RateLimiter
 }
 
 type ServerOption func(s *serverOption)
 
+// WithServerGrpcServerOption grpc服务配置
 func WithServerGrpcServerOption(opts ...grpc.ServerOption) ServerOption {
 	return func(s *serverOption) {
 		s.grpcServerOptions = append(s.grpcServerOptions, opts...)
+	}
+}
+
+// WithServiceLimiter 服务端限流
+func WithServiceLimiter(rateLimiter limiter.RateLimiter) ServerOption {
+	return func(s *serverOption) {
+		s.withLimiter = true
+		s.rateLimiter = rateLimiter
 	}
 }

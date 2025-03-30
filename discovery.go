@@ -1,9 +1,10 @@
 package rpc
 
 import (
-	"context"
 	"fmt"
 	"time"
+
+	"github.com/dysodeng/rpc/retry"
 
 	"github.com/dysodeng/rpc/breaker"
 	"google.golang.org/grpc"
@@ -49,6 +50,19 @@ func (s *serviceDiscovery) ServiceConn(serviceName string, opts ...ServiceDiscov
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 	}
+
+	// 拦截器
+	var chain []grpc.UnaryClientInterceptor
+	if options.withBreaker { // 熔断器
+		chain = append(chain, breaker.Interceptor(options.cb))
+	}
+	if options.withRetry { // 重试
+		chain = append(chain, retry.Interceptor(options.retryPolicy))
+	}
+	options.grpcDialOptions = append(
+		options.grpcDialOptions,
+		grpc.WithChainUnaryInterceptor(chain...),
+	)
 
 	// 超时设置与重试
 	options.grpcDialOptions = append(
@@ -96,6 +110,10 @@ type serviceDiscoveryOption struct {
 	lb              ServiceDiscoveryLB
 	credentials     *credentials.TransportCredentials
 	timeout         time.Duration
+	withBreaker     bool
+	cb              breaker.CircuitBreaker
+	withRetry       bool
+	retryPolicy     *retry.Policy
 }
 
 type ServiceDiscoveryOption func(s *serviceDiscoveryOption)
@@ -125,24 +143,18 @@ func WithServiceDiscoveryGrpcDialOption(opts ...grpc.DialOption) ServiceDiscover
 	}
 }
 
-// WithBreaker 设置熔断器
-func WithBreaker(cb breaker.CircuitBreaker) ServiceDiscoveryOption {
+// WithServiceDiscoveryBreaker 设置熔断器
+func WithServiceDiscoveryBreaker(cb breaker.CircuitBreaker) ServiceDiscoveryOption {
 	return func(s *serviceDiscoveryOption) {
-		s.grpcDialOptions = append(s.grpcDialOptions, grpc.WithUnaryInterceptor(
-			func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-				return cb.Execute(
-					ctx,
-					func() error {
-						// 执行正常的 RPC 调用
-						return invoker(ctx, method, req, reply, cc, opts...)
-					},
-					func(err error) error {
-						// 服务降级处理
-						// 这里可以返回默认值、缓存数据或者错误信息
-						return err
-					},
-				)
-			}),
-		)
+		s.withBreaker = true
+		s.cb = cb
+	}
+}
+
+// WithServiceDiscoveryRetry 设置重试
+func WithServiceDiscoveryRetry(retryPolicy *retry.Policy) ServiceDiscoveryOption {
+	return func(s *serviceDiscoveryOption) {
+		s.withRetry = true
+		s.retryPolicy = retryPolicy
 	}
 }
