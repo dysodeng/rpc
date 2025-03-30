@@ -118,6 +118,7 @@ type serviceDiscoveryOption struct {
 
 type ServiceDiscoveryOption func(s *serviceDiscoveryOption)
 
+// WithServiceDiscoveryLB 添加负载均衡选项
 func WithServiceDiscoveryLB(lb ServiceDiscoveryLB) ServiceDiscoveryOption {
 	return func(s *serviceDiscoveryOption) {
 		s.lb = lb

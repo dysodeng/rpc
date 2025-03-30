@@ -2,6 +2,9 @@ package metadata
 
 import "encoding/json"
 
+const DefaultVersion = "v1.0.0"
+
+// ServiceStatus 服务状态
 type ServiceStatus string
 
 const (
