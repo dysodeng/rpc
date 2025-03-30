@@ -1,8 +1,11 @@
 package rpc
 
 import (
+	"context"
 	"fmt"
 	"time"
+
+	"github.com/dysodeng/rpc/breaker"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -120,5 +123,27 @@ func WithServiceDiscoveryGrpcDialTransportCredentials(credentials *credentials.T
 func WithServiceDiscoveryGrpcDialOption(opts ...grpc.DialOption) ServiceDiscoveryOption {
 	return func(s *serviceDiscoveryOption) {
 		s.grpcDialOptions = append(s.grpcDialOptions, opts...)
+	}
+}
+
+// WithBreaker 设置熔断器
+func WithBreaker(cb breaker.CircuitBreaker) ServiceDiscoveryOption {
+	return func(s *serviceDiscoveryOption) {
+		s.grpcDialOptions = append(s.grpcDialOptions, grpc.WithUnaryInterceptor(
+			func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+				return cb.Execute(
+					ctx,
+					func() error {
+						// 执行正常的 RPC 调用
+						return invoker(ctx, method, req, reply, cc, opts...)
+					},
+					func(err error) error {
+						// 服务降级处理
+						// 这里可以返回默认值、缓存数据或者错误信息
+						return err
+					},
+				)
+			}),
+		)
 	}
 }
