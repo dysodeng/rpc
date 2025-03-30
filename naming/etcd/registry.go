@@ -25,7 +25,6 @@ type etcd struct {
 	dialTimeout    time.Duration
 	kv             *clientv3.Client
 	services       sync.Map
-	stopChan       chan struct{}
 }
 
 var registryEtcdOnceLock sync.Once
@@ -99,8 +98,7 @@ func NewEtcdRegistry(conf *config.ServerConfig, opts ...RegistryOption) (naming.
 		defer ticker.Stop()
 
 		for {
-			select {
-			case <-ticker.C:
+			for range ticker.C {
 				if err = checkHealth(); err != nil {
 					log.Println("etcd health check failed.")
 					// 尝试重连etcd

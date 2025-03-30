@@ -49,7 +49,6 @@ func (s *serviceDiscovery) ServiceConn(serviceName string, opts ...ServiceDiscov
 			options.grpcDialOptions,
 			grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"loadBalancingConfig":[{"%s":{}}]}`, options.lb)),
 		)
-		break
 	}
 
 	conn, err := grpc.NewClient(

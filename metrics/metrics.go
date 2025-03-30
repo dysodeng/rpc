@@ -22,7 +22,7 @@ func SetMeter(m metric.Meter, name string) error {
 
 	var err error
 	requestCounter, err = meter.Int64Counter(
-		fmt.Sprintf("%s_rpc_requests_total", name),
+		fmt.Sprintf("%s_rpc_requests_total", serviceName),
 		metric.WithDescription("Total number of RPC requests"),
 	)
 	if err != nil {
@@ -30,7 +30,7 @@ func SetMeter(m metric.Meter, name string) error {
 	}
 
 	requestLatency, err = meter.Float64Histogram(
-		fmt.Sprintf("%s_rpc_request_duration_seconds", name),
+		fmt.Sprintf("%s_rpc_request_duration_seconds", serviceName),
 		metric.WithDescription("RPC request duration in seconds"),
 	)
 	if err != nil {
