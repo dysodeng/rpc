@@ -93,7 +93,6 @@ type serviceDiscoveryOption struct {
 	grpcDialOptions []grpc.DialOption
 	lb              ServiceDiscoveryLB
 	credentials     *credentials.TransportCredentials
-	timeout         time.Duration
 	withBreaker     bool
 	cb              breaker.CircuitBreaker
 	withRetry       bool
