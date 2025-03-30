@@ -158,13 +158,10 @@ func (registry *etcd) Register(serviceName string) error {
 
 	go func() {
 		for {
-			select {
-			case _, ok := <-leaseRespChan:
-				if !ok {
-					cancel()
-					return
-				}
+			for range leaseRespChan {
+
 			}
+			cancel()
 		}
 	}()
 
