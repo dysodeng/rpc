@@ -2,10 +2,13 @@ package rpc
 
 import (
 	"fmt"
+	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
 )
 
@@ -31,6 +34,8 @@ func NewServiceDiscovery(appName string, resolverBuilder resolver.Builder) Servi
 func (s *serviceDiscovery) ServiceConn(serviceName string, opts ...ServiceDiscoveryOption) (*grpc.ClientConn, error) {
 	options := &serviceDiscoveryOption{
 		grpcDialOptions: []grpc.DialOption{},
+		lb:              RoundRobin,
+		timeout:         time.Second * 10,
 	}
 	for _, opt := range opts {
 		opt(options)
@@ -42,6 +47,20 @@ func (s *serviceDiscovery) ServiceConn(serviceName string, opts ...ServiceDiscov
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 	}
+
+	// 超时设置与重试
+	options.grpcDialOptions = append(
+		options.grpcDialOptions,
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff:           backoff.DefaultConfig,
+			MinConnectTimeout: options.timeout,
+		}),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                10 * time.Second, // 保活时间
+			Timeout:             options.timeout,  // 保活超时
+			PermitWithoutStream: true,             // 没有活动流时也保持连接
+		}),
+	)
 
 	switch options.lb {
 	case RoundRobin, PickFirst:
@@ -74,6 +93,7 @@ type serviceDiscoveryOption struct {
 	grpcDialOptions []grpc.DialOption
 	lb              ServiceDiscoveryLB
 	credentials     *credentials.TransportCredentials
+	timeout         time.Duration
 }
 
 type ServiceDiscoveryOption func(s *serviceDiscoveryOption)
@@ -81,6 +101,13 @@ type ServiceDiscoveryOption func(s *serviceDiscoveryOption)
 func WithServiceDiscoveryLB(lb ServiceDiscoveryLB) ServiceDiscoveryOption {
 	return func(s *serviceDiscoveryOption) {
 		s.lb = lb
+	}
+}
+
+// WithServiceDiscoveryTimeout 添加超时设置选项
+func WithServiceDiscoveryTimeout(timeout time.Duration) ServiceDiscoveryOption {
+	return func(s *serviceDiscoveryOption) {
+		s.timeout = timeout
 	}
 }
 
