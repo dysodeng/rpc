@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dysodeng/rpc/retry"
-
 	"github.com/dysodeng/rpc/breaker"
+	"github.com/dysodeng/rpc/retry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
@@ -72,7 +71,7 @@ func (s *serviceDiscovery) ServiceConn(serviceName string, opts ...ServiceDiscov
 			MinConnectTimeout: options.timeout,
 		}),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                10 * time.Second, // 保活时间
+			Time:                60 * time.Second, // 保活时间
 			Timeout:             options.timeout,  // 保活超时
 			PermitWithoutStream: true,             // 没有活动流时也保持连接
 		}),
