@@ -77,7 +77,7 @@ func (s *server) RegisterService(service metadata.ServiceRegister, grpcRegister 
 
 	// 向注册中心注册服务
 	serviceName := fmt.Sprintf("%s.%s", s.appName, serviceMetadata.ServiceName)
-	err := s.registry.Register(serviceName)
+	err := s.registry.Register(serviceName, serviceMetadata)
 	if err != nil {
 		return err
 	}

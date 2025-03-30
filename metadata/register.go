@@ -9,6 +9,8 @@ type ServiceRegisterMetadata struct {
 	AppName     string
 	ServiceName string
 	Version     string
+	Env         string
+	Tags        []string
 }
 
 type UnsafeServiceRegister interface {

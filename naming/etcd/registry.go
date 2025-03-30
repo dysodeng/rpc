@@ -3,13 +3,16 @@ package etcd
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/dysodeng/rpc/config"
+	"github.com/dysodeng/rpc/metadata"
 	"github.com/dysodeng/rpc/naming"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -25,6 +28,12 @@ type etcd struct {
 	dialTimeout    time.Duration
 	kv             *clientv3.Client
 	services       sync.Map
+}
+
+type serviceRegistryInstance struct {
+	leaseID                 clientv3.LeaseID
+	serviceName             string
+	serviceRegistryMetadata metadata.ServiceRegisterMetadata
 }
 
 var registryEtcdOnceLock sync.Once
@@ -118,7 +127,8 @@ func NewEtcdRegistry(conf *config.ServerConfig, opts ...RegistryOption) (naming.
 						// 重新注册服务
 						etcdRegistry.kv = cli
 						etcdRegistry.services.Range(func(key, value any) bool {
-							_ = etcdRegistry.Register(key.(string))
+							mata := value.(serviceRegistryInstance)
+							_ = etcdRegistry.Register(key.(string), mata.serviceRegistryMetadata)
 							return true
 						})
 					}
@@ -131,8 +141,27 @@ func NewEtcdRegistry(conf *config.ServerConfig, opts ...RegistryOption) (naming.
 }
 
 // Register 注册服务
-func (registry *etcd) Register(serviceName string) error {
-	serviceKey := fmt.Sprintf("/%s/%s/%s", registry.namespace, serviceName, registry.serviceAddress)
+func (registry *etcd) Register(serviceName string, meta metadata.ServiceRegisterMetadata) error {
+	serviceMetadata := &metadata.ServiceMetadata{
+		ServiceName:  serviceName,
+		Version:      meta.Version,
+		Address:      registry.serviceAddress,
+		Env:          meta.Env,
+		Weight:       100, // 默认权重
+		Tags:         meta.Tags,
+		Status:       metadata.ServiceStatusUp,
+		RegisterTime: time.Now().Unix(),
+		InstanceID:   uuid.New().String(),
+		Properties:   make(map[string]string),
+	}
+
+	// 序列化元数据
+	metadataBytes, err := json.Marshal(serviceMetadata)
+	if err != nil {
+		return fmt.Errorf("marshal service metadata failed: %v", err)
+	}
+
+	serviceKey := fmt.Sprintf("/%s/%s/%s", registry.namespace, serviceName, serviceMetadata.InstanceID)
 
 	// 设置租约时间
 	ctx, cancel := context.WithCancel(context.Background())
@@ -143,7 +172,7 @@ func (registry *etcd) Register(serviceName string) error {
 	}
 
 	// 注册服务并绑定租约
-	_, err = registry.kv.Put(ctx, serviceKey, registry.serviceAddress, clientv3.WithLease(resp.ID))
+	_, err = registry.kv.Put(ctx, serviceKey, string(metadataBytes), clientv3.WithLease(resp.ID))
 	if err != nil {
 		cancel()
 		return err
@@ -166,17 +195,22 @@ func (registry *etcd) Register(serviceName string) error {
 	}()
 
 	// 本地存储服务
-	registry.services.Store(serviceName, resp.ID)
-	log.Printf("register gRPC service: %s", serviceName)
+	registry.services.Store(serviceName, serviceRegistryInstance{
+		leaseID:                 resp.ID,
+		serviceName:             serviceName,
+		serviceRegistryMetadata: meta,
+	})
+	log.Printf("register gRPC service: %s", string(metadataBytes))
 	return nil
 }
 
 // Unregister 注销服务
 func (registry *etcd) Unregister(serviceName string) error {
-	leaseID, ok := registry.services.Load(serviceName)
+	value, ok := registry.services.Load(serviceName)
 	if ok {
+		mata := value.(serviceRegistryInstance)
 		// 撤销租约
-		if _, err := registry.kv.Revoke(context.Background(), leaseID.(clientv3.LeaseID)); err != nil {
+		if _, err := registry.kv.Revoke(context.Background(), mata.leaseID); err != nil {
 			return err
 		}
 	}
