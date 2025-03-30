@@ -6,6 +6,7 @@ type ServiceRegister interface {
 }
 
 type ServiceRegisterMetadata struct {
+	AppName     string
 	ServiceName string
 	Version     string
 }

@@ -2,9 +2,10 @@ package etcd
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/dysodeng/rpc/config"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	grpcResolver "google.golang.org/grpc/resolver"
@@ -26,19 +27,22 @@ const (
 )
 
 // NewEtcdBuilder new etcd Builder
-func NewEtcdBuilder(etcdAddress string, opts ...BuilderOption) *Builder {
+func NewEtcdBuilder(conf *config.EtcdConfig, opts ...BuilderOption) *Builder {
 	builder := &Builder{
 		namespace:          defaultNamespace,
 		resolveNowFreqTime: defaultResolveNowFreq,
 		dialTimeout:        defaultTimeout * time.Second,
+	}
+	if conf.Namespace != "" {
+		builder.namespace = conf.Namespace
 	}
 
 	for _, opt := range opts {
 		opt(builder)
 	}
 
-	conf := clientv3.Config{
-		Endpoints:   strings.Split(etcdAddress, ","),
+	etcdConfig := clientv3.Config{
+		Endpoints:   conf.Endpoints,
 		DialTimeout: builder.dialTimeout,
 	}
 
@@ -46,14 +50,14 @@ func NewEtcdBuilder(etcdAddress string, opts ...BuilderOption) *Builder {
 	var client *clientv3.Client
 
 	builderEtcdOnceLock.Do(func() {
-		client, err = clientv3.New(conf)
+		client, err = clientv3.New(etcdConfig)
 		if err == nil {
 			builder.kv = client
 		}
 
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), conf.DialTimeout)
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), etcdConfig.DialTimeout)
 		defer cancel()
-		_, err = client.Status(timeoutCtx, conf.Endpoints[0])
+		_, err = client.Status(timeoutCtx, etcdConfig.Endpoints[0])
 	})
 
 	grpcResolver.Register(builder)

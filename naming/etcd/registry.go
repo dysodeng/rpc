@@ -5,10 +5,10 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/dysodeng/rpc/config"
 	"github.com/dysodeng/rpc/naming"
 	"github.com/pkg/errors"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -37,12 +37,15 @@ const (
 )
 
 // NewEtcdRegistry 创建etcd注册中心
-func NewEtcdRegistry(grpcServiceRegisterAddress, etcdAddress string, opts ...RegistryOption) (naming.Registry, error) {
+func NewEtcdRegistry(conf *config.ServerConfig, opts ...RegistryOption) (naming.Registry, error) {
 	etcdRegistry := &etcd{
-		serviceAddress: grpcServiceRegisterAddress,
+		serviceAddress: conf.ServiceAddr,
 		namespace:      defaultNamespace,
 		lease:          defaultLease,
 		dialTimeout:    defaultTimeout * time.Second,
+	}
+	if conf.EtcdConfig.Namespace != "" {
+		etcdRegistry.namespace = conf.EtcdConfig.Namespace
 	}
 
 	for _, opt := range opts {
@@ -52,27 +55,27 @@ func NewEtcdRegistry(grpcServiceRegisterAddress, etcdAddress string, opts ...Reg
 	var err error
 	var cli *clientv3.Client
 
-	conf := clientv3.Config{
-		Endpoints:   strings.Split(etcdAddress, ","),
+	etcdConfig := clientv3.Config{
+		Endpoints:   conf.EtcdConfig.Endpoints,
 		DialTimeout: etcdRegistry.dialTimeout,
 	}
 	if etcdRegistry.username != "" && etcdRegistry.password != "" {
-		conf.Username = etcdRegistry.username
-		conf.Password = etcdRegistry.password
+		etcdConfig.Username = etcdRegistry.username
+		etcdConfig.Password = etcdRegistry.password
 	}
 	if etcdRegistry.tlsConfig != nil {
-		conf.TLS = etcdRegistry.tlsConfig
+		etcdConfig.TLS = etcdRegistry.tlsConfig
 	}
 
 	registryEtcdOnceLock.Do(func() {
-		cli, err = clientv3.New(conf)
+		cli, err = clientv3.New(etcdConfig)
 		if err == nil {
 			etcdRegistry.kv = cli
 		}
 
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), etcdRegistry.dialTimeout)
 		defer cancel()
-		_, err = cli.Status(timeoutCtx, conf.Endpoints[0])
+		_, err = cli.Status(timeoutCtx, etcdConfig.Endpoints[0])
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not connect to etcd")
@@ -84,7 +87,7 @@ func NewEtcdRegistry(grpcServiceRegisterAddress, etcdAddress string, opts ...Reg
 			ctx, chCancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer chCancel()
 
-			_, err = etcdRegistry.kv.Maintenance.Status(ctx, conf.Endpoints[0])
+			_, err = etcdRegistry.kv.Maintenance.Status(ctx, etcdConfig.Endpoints[0])
 			if err != nil {
 				return err
 			}
@@ -101,10 +104,10 @@ func NewEtcdRegistry(grpcServiceRegisterAddress, etcdAddress string, opts ...Reg
 				if err = checkHealth(); err != nil {
 					log.Println("etcd health check failed.")
 					// 尝试重连etcd
-					cli, err = clientv3.New(conf)
+					cli, err = clientv3.New(etcdConfig)
 					if err == nil {
 						timeoutCtx, cancel := context.WithTimeout(context.Background(), etcdRegistry.dialTimeout)
-						_, err = cli.Status(timeoutCtx, conf.Endpoints[0])
+						_, err = cli.Status(timeoutCtx, etcdConfig.Endpoints[0])
 						if err != nil {
 							cancel()
 							log.Println("could not connect to etcd.", err)
