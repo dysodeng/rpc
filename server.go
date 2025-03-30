@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/dysodeng/rpc/config"
+	rpcError "github.com/dysodeng/rpc/errors"
 	"github.com/dysodeng/rpc/health"
 	"github.com/dysodeng/rpc/logger"
 	"github.com/dysodeng/rpc/metadata"
@@ -34,14 +35,17 @@ type server struct {
 
 func NewServer(conf *config.ServerConfig, registry naming.Registry, opts ...ServerOption) Server {
 	options := &serverOption{}
+
 	// 添加默认中间件
 	options.grpcServerOptions = append(options.grpcServerOptions,
 		grpc.UnaryInterceptor(middleware.Chain(
 			middleware.Recovery(),
 			middleware.Logging(logger.Logger()),
 			middleware.Metrics(),
+			middleware.UnaryServerInterceptor(rpcError.ErrorHandlingInterceptor()), // 添加错误处理
 		)),
 	)
+
 	for _, opt := range opts {
 		opt(options)
 	}

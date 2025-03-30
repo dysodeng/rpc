@@ -2,8 +2,10 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	rpcError "github.com/dysodeng/rpc/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
@@ -25,7 +27,16 @@ func Logging(log *zap.Logger) UnaryServerInterceptor {
 
 		if err != nil {
 			fields = append(fields, zap.Error(err))
-			log.Error("rpc request failed", fields...)
+
+			// 转换为 rpc 错误并判断是否为业务错误
+			rpcErr := rpcError.ToError(err)
+			var e *rpcError.Error
+			if errors.As(rpcErr, &e) && e.Code >= 11000 && e.Code < 20000 {
+				// 业务错误使用 Info 级别记录
+				log.Info("rpc business error", fields...)
+			} else {
+				log.Error("rpc request failed", fields...)
+			}
 		} else {
 			log.Info("rpc request completed", fields...)
 		}

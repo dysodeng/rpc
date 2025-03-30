@@ -2,8 +2,11 @@ package breaker
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
+
+	rpcError "github.com/dysodeng/rpc/errors"
 )
 
 // State 断路器状态
@@ -27,16 +30,16 @@ type circuitBreaker struct {
 	mutex sync.RWMutex
 
 	state                 State
-	failureThreshold      uint32        // 故障阈值
-	successThreshold      uint32        // 成功阈值
-	failureCount          uint32        // 当前故障计数
-	successCount          uint32        // 当前成功计数
-	timeout               time.Duration // 超时时间
-	lastStateChangeTime   time.Time     // 最后一次状态改变时间
-	halfOpenRetryInterval time.Duration // 半开状态重试间隔
+	failureThreshold      uint32
+	successThreshold      uint32
+	failureCount          uint32
+	successCount          uint32
+	timeout               time.Duration
+	lastStateChangeTime   time.Time
+	halfOpenRetryInterval time.Duration
+	isFailureFunc         func(err error) bool // 添加错误判断函数
 }
 
-// NewCircuitBreaker 创建新的断路器
 func NewCircuitBreaker(options ...Option) CircuitBreaker {
 	cb := &circuitBreaker{
 		state:                 StateClosed,
@@ -44,6 +47,7 @@ func NewCircuitBreaker(options ...Option) CircuitBreaker {
 		successThreshold:      3,                // 默认3次成功恢复服务
 		timeout:               time.Second * 10, // 默认10秒超时
 		halfOpenRetryInterval: time.Second * 5,  // 默认5秒重试间隔
+		isFailureFunc:         DefaultIsFailure, // 设置默认错误判断函数
 	}
 
 	for _, option := range options {
@@ -53,12 +57,30 @@ func NewCircuitBreaker(options ...Option) CircuitBreaker {
 	return cb
 }
 
+// DefaultIsFailure 默认错误判断函数
+func DefaultIsFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// 转换为 rpc 错误
+	rpcErr := rpcError.ToError(err)
+	var e *rpcError.Error
+	if errors.As(rpcErr, &e) {
+		// 业务错误码范围判断
+		if e.Code >= 11000 && e.Code < 20000 {
+			return false // 业务错误不计入失败
+		}
+	}
+	return true // 其他错误计入失败
+}
+
 func (cb *circuitBreaker) Execute(ctx context.Context, run func() error, fallback func(error) error) error {
 	cb.mutex.RLock()
 	state := cb.state
 	cb.mutex.RUnlock()
 
-	// 如果断路器打开，直接执行降级逻辑
+	// 如果断路器打开，先判断是否需要进入半开状态
 	if state == StateOpen {
 		if time.Since(cb.lastStateChangeTime) > cb.timeout {
 			cb.mutex.Lock()
@@ -71,6 +93,11 @@ func (cb *circuitBreaker) Execute(ctx context.Context, run func() error, fallbac
 
 	// 执行请求
 	err := run()
+
+	// 如果是业务错误，直接返回，不影响断路器状态
+	if err != nil && !cb.isFailureFunc(err) {
+		return err
+	}
 
 	cb.mutex.Lock()
 	defer cb.mutex.Unlock()

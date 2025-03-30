@@ -32,3 +32,10 @@ func WithHalfOpenRetryInterval(interval time.Duration) Option {
 		cb.halfOpenRetryInterval = interval
 	}
 }
+
+// WithIsFailureFunc 设置错误判断函数
+func WithIsFailureFunc(f func(err error) bool) Option {
+	return func(cb *circuitBreaker) {
+		cb.isFailureFunc = f
+	}
+}
