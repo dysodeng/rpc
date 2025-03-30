@@ -31,8 +31,6 @@ func NewServiceDiscovery(appName string, resolverBuilder resolver.Builder) Servi
 func (s *serviceDiscovery) ServiceConn(serviceName string, opts ...ServiceDiscoveryOption) (*grpc.ClientConn, error) {
 	options := &serviceDiscoveryOption{
 		grpcDialOptions: []grpc.DialOption{},
-		minWeight:       0,
-		onlyHealthy:     true,
 	}
 	for _, opt := range opts {
 		opt(options)
@@ -76,11 +74,6 @@ type serviceDiscoveryOption struct {
 	grpcDialOptions []grpc.DialOption
 	lb              ServiceDiscoveryLB
 	credentials     *credentials.TransportCredentials
-	version         string            // 版本过滤
-	tags            []string          // 标签过滤
-	properties      map[string]string // 属性过滤
-	minWeight       int               // 最小权重
-	onlyHealthy     bool              // 是否只返回健康实例
 }
 
 type ServiceDiscoveryOption func(s *serviceDiscoveryOption)
