@@ -1,7 +1,6 @@
 package rpc
 
 import (
-	"fmt"
 	"net"
 	"reflect"
 
@@ -60,7 +59,6 @@ func NewServer(conf *config.ServerConfig, registry naming.Registry, opts ...Serv
 	)
 
 	s := &server{
-		appName:     conf.AppName,
 		serviceAddr: conf.ServiceAddr,
 		registry:    registry,
 		config:      conf,
@@ -89,8 +87,8 @@ func (s *server) RegisterService(service metadata.ServiceRegister, grpcRegister 
 	serviceMetadata := service.RegisterMetadata()
 
 	// 向注册中心注册服务
-	serviceName := fmt.Sprintf("%s.%s", s.appName, serviceMetadata.ServiceName)
-	err := s.registry.Register(serviceName, serviceMetadata)
+	// serviceName := fmt.Sprintf("%s.%s", s.appName, serviceMetadata.ServiceName)
+	err := s.registry.Register(serviceMetadata.ServiceName, serviceMetadata)
 	if err != nil {
 		return err
 	}

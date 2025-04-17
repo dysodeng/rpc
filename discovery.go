@@ -21,13 +21,11 @@ type ServiceDiscovery interface {
 }
 
 type serviceDiscovery struct {
-	appName         string
 	resolverBuilder resolver.Builder
 }
 
-func NewServiceDiscovery(appName string, resolverBuilder resolver.Builder) ServiceDiscovery {
+func NewServiceDiscovery(resolverBuilder resolver.Builder) ServiceDiscovery {
 	s := &serviceDiscovery{
-		appName:         appName,
 		resolverBuilder: resolverBuilder,
 	}
 	return s
@@ -71,7 +69,7 @@ func (s *serviceDiscovery) ServiceConn(serviceName string, opts ...ServiceDiscov
 	}
 
 	conn, err := grpc.NewClient(
-		fmt.Sprintf("%s:///%s.%s", s.resolverBuilder.Scheme(), s.appName, serviceName),
+		fmt.Sprintf("%s:///%s", s.resolverBuilder.Scheme(), serviceName),
 		options.grpcDialOptions...,
 	)
 	if err != nil {
